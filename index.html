@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>💬 Chat</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="chat-container">
+    <div id="chat-header">
+      <span class="title">💬 Chat</span>
+      <span class="status" id="typing-indicator"></span>
+    </div>
+
+    <!-- Configuración de nickname -->
+    <div id="user-setup">
+      <input id="username" placeholder="Escribe tu nickname" />
+      <button id="join-btn">Unirse</button>
+    </div>
+
+    <!-- Mensajes -->
+    <ul id="messages"></ul>
+
+    <!-- Input de mensaje -->
+    <div id="input-area">
+      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off" />
+      <button id="send-btn">➤</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const userSetup = document.getElementById("user-setup");
+    const usernameInput = document.getElementById("username");
+    const joinBtn = document.getElementById("join-btn");
+    const messages = document.getElementById("messages");
+    const formInput = document.getElementById("message-input");
+    const sendButton = document.getElementById("send-btn");
+    const typingIndicator = document.getElementById("typing-indicator");
+
+    let nickname = "";
+
+    // Función para mostrar mensaje
+    function addMessage(msg, isYou = false) {
+      const li = document.createElement("li");
+      li.className = "message " + (isYou ? "you" : "other");
+      li.innerHTML = `
+        <span class="name">${msg.name}</span>
+        <span class="text">${msg.text}</span>
+        <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+      `;
+      messages.appendChild(li);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // Unirse con nickname
+    joinBtn.addEventListener("click", () => {
+      const name = usernameInput.value.trim();
+      if(name){
+        nickname = name;
+        userSetup.style.display = "none";
+      }
+    });
+
+    // Recibir historial
+    socket.on("chat history", (history) => {
+      history.forEach(msg => addMessage(msg, msg.name === nickname));
+    });
+
+    // Recibir mensaje nuevo
+    socket.on("chat message", (msg) => {
+      addMessage(msg, msg.name === nickname);
+    });
+
+    // Enviar mensaje
+    sendButton.addEventListener("click", () => {
+      if(formInput.value.trim() !== "" && nickname !== ""){
+        const msg = { name: nickname, text: formInput.value };
+        socket.emit("chat message", msg);
+        formInput.value = "";
+      }
+    });
+
+    formInput.addEventListener("keypress", (e) => {
+      if(e.key === "Enter") sendButton.click();
+    });
+
+    // Indicador "está escribiendo..."
+    formInput.addEventListener("input", () => {
+      if(nickname !== "") socket.emit("typing", nickname);
+    });
+
+    socket.on("typing", (name) => {
+      if(name !== nickname){
+        typingIndicator.textContent = `${name} está escribiendo...`;
+        clearTimeout(window.typingTimeout);
+        window.typingTimeout = setTimeout(() => typingIndicator.textContent = "", 2000);
+      }
+    });
+  </script>
+</body>
+</html>
