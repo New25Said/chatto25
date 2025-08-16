@@ -11,9 +11,7 @@
   <div id="sidebar">
     <div id="sidebar-header">💬 Chat</div>
     <input id="search-contact" placeholder="Buscar..."/>
-    <ul id="chat-list">
-      <!-- Lista de usuarios y grupos -->
-    </ul>
+    <ul id="chat-list"></ul>
     <button id="create-group-btn">Crear Grupo</button>
   </div>
 
@@ -65,11 +63,14 @@ if(!nickname){
 // Función para agregar mensaje
 function addMessage(msg){
   if(msg.type==="public" && currentChat!=="public") return;
-  if(msg.type==="private" && currentChat!=="private"){
-    if(msg.name!==nickname && msg.target!==nickname) return;
+  if(msg.type==="private"){
+    if(currentChat!=="private") return;
+    if(msg.name!==nickname && msg.target!==nickname && msg.name!==currentTarget && msg.target!==currentTarget) return;
   }
-  if(msg.type==="group" && currentChat!=="group") return;
-  if(msg.type==="group" && msg.target!==currentTarget) return;
+  if(msg.type==="group"){
+    if(currentChat!=="group") return;
+    if(msg.target !== currentTarget) return;
+  }
 
   const li = document.createElement("li");
   li.className = "message " + (msg.name===nickname?"you":"other");
