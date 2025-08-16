@@ -2,18 +2,12 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>💬 Chat WhatsApp Style</title>
+<title>💬 Chat WhatsApp</title>
 <link rel="stylesheet" href="styles.css">
 <style>
-  /* Círculo verde para mensajes no leídos */
-  .unread-dot{
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    background-color: #2ecc71; /* verde */
-    border-radius: 50%;
-    margin-left: 6px;
-  }
+  .unread-dot{ display:inline-block;width:10px;height:10px;background:#2ecc71;border-radius:50%;margin-left:6px; }
+  #image-input{ display:inline-block;margin-left:5px; }
+  img.message-img{ max-width:200px; max-height:200px; border-radius:8px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -34,12 +28,12 @@
     <ul id="messages"></ul>
     <div id="input-area">
       <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
+      <input type="file" id="image-input"/>
       <button id="send-btn">➤</button>
     </div>
   </div>
 </div>
 
-<!-- Modal nickname -->
 <div id="nickname-modal">
   <input id="username" placeholder="Escribe tu nickname"/>
   <button id="join-btn">Unirse</button>
@@ -52,41 +46,51 @@ const socket = io();
 let nickname = localStorage.getItem("nickname") || "";
 let currentChat = "public";
 let currentTarget = null;
-let allMessages = []; // Historial completo
-let unread = {};      // Mensajes no leídos por usuario
+let allMessages = [];
+let unread = {};
+let userList = [];
 
-const nicknameModal = document.getElementById("nickname-modal");
-const usernameInput = document.getElementById("username");
-const joinBtn = document.getElementById("join-btn");
-const messages = document.getElementById("messages");
-const messageInput = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-btn");
-const typingIndicator = document.getElementById("typing-indicator");
-const chatList = document.getElementById("chat-list");
-const chatTitle = document.getElementById("chat-title");
-const createGroupBtn = document.getElementById("create-group-btn");
+const nicknameModal=document.getElementById("nickname-modal");
+const usernameInput=document.getElementById("username");
+const joinBtn=document.getElementById("join-btn");
+const messages=document.getElementById("messages");
+const messageInput=document.getElementById("message-input");
+const sendBtn=document.getElementById("send-btn");
+const typingIndicator=document.getElementById("typing-indicator");
+const chatList=document.getElementById("chat-list");
+const chatTitle=document.getElementById("chat-title");
+const createGroupBtn=document.getElementById("create-group-btn");
+const imageInput=document.getElementById("image-input");
 
-// Pedir nickname si no existe
-if(!nickname){
-  nicknameModal.style.display="flex";
-} else {
-  socket.emit("set nickname", nickname);
-}
+if(!nickname){ nicknameModal.style.display="flex"; } 
+else{ socket.emit("set nickname", nickname); }
 
-// Agregar mensaje al DOM
+joinBtn.addEventListener("click", ()=>{
+  const name=usernameInput.value.trim();
+  if(name){
+    nickname=name;
+    localStorage.setItem("nickname", nickname);
+    nicknameModal.style.display="none";
+    socket.emit("set nickname", nickname);
+  }
+});
+
 function addMessage(msg){
-  const li = document.createElement("li");
-  li.className = "message " + (msg.name===nickname?"you":"other");
-  li.innerHTML = `<span class="name">${msg.name}</span>
-                  <span class="text">${msg.text}</span>
-                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
+  const li=document.createElement("li");
+  li.className="message "+(msg.name===nickname?"you":"other");
+
+  let content;
+  if(msg.type==="image") content=`<img class="message-img" src="${msg.data}"/>`;
+  else content=`<span class="text">${msg.text}</span>`;
+
+  li.innerHTML=`<span class="name">${msg.name}</span>${content}
+                <span class="time">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
   messages.appendChild(li);
-  messages.scrollTop = messages.scrollHeight;
+  messages.scrollTop=messages.scrollHeight;
 }
 
-// Renderizar mensajes del chat actual
 function renderMessages(){
-  messages.innerHTML = "";
+  messages.innerHTML="";
   allMessages.forEach(msg=>{
     if(currentChat==="public" && msg.type==="public") addMessage(msg);
     else if(currentChat==="private" && msg.type==="private"){
@@ -99,131 +103,113 @@ function renderMessages(){
   });
 }
 
-// Renderizar lista de chats con indicadores no leídos
-function renderChatList(usersList){
+function renderChatList(){
   chatList.innerHTML="";
-  // Público
   const generalLi=document.createElement("li");
   generalLi.textContent="General";
   generalLi.className="public";
-  generalLi.addEventListener("click", ()=>selectChat("public"));
+  generalLi.addEventListener("click",()=>selectChat("public"));
   chatList.appendChild(generalLi);
 
-  usersList.forEach(user=>{
+  userList.forEach(user=>{
     if(user!==nickname){
       const li=document.createElement("li");
-      li.textContent = user;
-
-      // Círculo verde si hay mensajes no leídos
+      li.textContent=user;
+      li.className="contact";
       if(unread[user]){
-        const dot = document.createElement("span");
+        const dot=document.createElement("span");
         dot.className="unread-dot";
         li.appendChild(dot);
       }
-
-      li.className="contact";
-      li.addEventListener("click", ()=>{
-        selectChat("private", user);
-        unread[user] = 0; // marcar como leído
-        renderChatList(usersList);
+      li.addEventListener("click",()=>{
+        selectChat("private",user);
+        unread[user]=0;
+        renderChatList();
       });
       chatList.appendChild(li);
     }
   });
-}
+});
 
-// Cambiar de chat
-function selectChat(type, target=null){
-  currentChat = type;
-  currentTarget = target;
-  chatTitle.textContent = target || "General";
+function selectChat(type,target=null){
+  currentChat=type;
+  currentTarget=target;
+  chatTitle.textContent=target||"General";
   renderMessages();
 }
 
-// Unirse con nickname
-joinBtn.addEventListener("click", ()=>{
-  const name = usernameInput.value.trim();
-  if(name){
-    nickname=name;
-    localStorage.setItem("nickname", nickname);
-    nicknameModal.style.display="none";
-    socket.emit("set nickname", nickname);
-  }
-});
-
-// Enviar mensaje
-sendBtn.addEventListener("click", ()=>{
-  const text = messageInput.value.trim();
-  if(!text || !nickname) return;
-
-  if(currentChat==="public") socket.emit("chat public", text);
+sendBtn.addEventListener("click",()=>{
+  const text=messageInput.value.trim();
+  if(!text||!nickname) return;
+  if(currentChat==="public") socket.emit("chat public",text);
   else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
   else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
-
   messageInput.value="";
 });
 
-messageInput.addEventListener("keypress", e=>{
+messageInput.addEventListener("keypress",e=>{
   if(e.key==="Enter") sendBtn.click();
 });
 
-// Indicador escribiendo
-messageInput.addEventListener("input", ()=>{
-  socket.emit("typing",{type:currentChat,target:currentTarget});
-});
-socket.on("typing", name=>{
+messageInput.addEventListener("input",()=>socket.emit("typing",{type:currentChat,target:currentTarget}));
+socket.on("typing",name=>{
   if(name!==nickname){
-    typingIndicator.textContent = `${name} está escribiendo...`;
+    typingIndicator.textContent=`${name} está escribiendo...`;
     clearTimeout(window.typingTimeout);
-    window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
+    window.typingTimeout=setTimeout(()=>typingIndicator.textContent="",2000);
   }
 });
 
-// Recibir historial
-socket.on("chat history", history=>{
-  allMessages = history;
+socket.on("chat history",history=>{
+  allMessages=history;
   renderMessages();
 });
 
-// Recibir nuevos mensajes
-socket.on("chat message", msg=>{
+socket.on("chat message",msg=>{
   allMessages.push(msg);
-
-  // Mensajes privados no leídos
   if(msg.type==="private"){
-    const other = (msg.name===nickname ? msg.target : msg.name);
-    if(currentChat!=="private" || currentTarget!==other){
-      unread[other] = (unread[other] || 0) + 1;
-    }
+    const other=(msg.name===nickname?msg.target:msg.name);
+    if(currentChat!=="private" || currentTarget!==other) unread[other]=(unread[other]||0)+1;
   }
-
   renderMessages();
+  renderChatList();
 });
 
-// Lista de usuarios
-socket.on("user list", users=>{
-  renderChatList(users);
+socket.on("user list",users=>{
+  userList=users;
+  renderChatList();
 });
 
-// Lista de grupos
-socket.on("group list", groups=>{
+socket.on("group list",groups=>{
   groups.forEach(group=>{
     const li=document.createElement("li");
     li.textContent=group;
     li.className="group";
-    li.addEventListener("click", ()=>selectChat("group", group));
+    li.addEventListener("click",()=>selectChat("group",group));
     chatList.appendChild(li);
   });
 });
 
-// Crear grupo
-createGroupBtn.addEventListener("click", ()=>{
-  const name = prompt("Nombre del grupo:");
-  const members = prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
-  if(name && members.length>0){
+createGroupBtn.addEventListener("click",()=>{
+  const name=prompt("Nombre del grupo:");
+  const members=prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
+  if(name&&members.length>0){
     members.push(nickname);
     socket.emit("create group",{groupName:name,members});
   }
+});
+
+imageInput.addEventListener("change",()=>{
+  const file=imageInput.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const dataURL=e.target.result;
+    if(currentChat==="public") socket.emit("chat image",{data:dataURL});
+    else if(currentChat==="private") socket.emit("chat image",{data:dataURL,target:currentTarget});
+    else if(currentChat==="group") socket.emit("chat image",{data:dataURL,target:currentTarget});
+  };
+  reader.readAsDataURL(file);
 });
 </script>
 </body>
