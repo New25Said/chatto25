@@ -1,110 +1,129 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>💬 Chat</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="UTF-8">
+<title>💬 Chat Completo</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="chat-container">
-    <div id="chat-header">
-      <span class="title">💬 Chat</span>
-      <span class="status" id="typing-indicator"></span>
-    </div>
-
-    <!-- Configuración de nickname -->
-    <div id="user-setup">
-      <input id="username" placeholder="Escribe tu nickname" />
-      <button id="join-btn">Unirse</button>
-    </div>
-
-    <!-- Mensajes -->
-    <ul id="messages"></ul>
-
-    <!-- Input de mensaje -->
-    <div id="input-area">
-      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off" />
-      <button id="send-btn">➤</button>
-    </div>
+<div id="chat-container">
+  <div id="chat-header">
+    <span class="title">💬 Chat</span>
+    <span class="status" id="typing-indicator"></span>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
+  <!-- Nickname -->
+  <div id="user-setup">
+    <input id="username" placeholder="Escribe tu nickname"/>
+    <button id="join-btn">Unirse</button>
+  </div>
 
-    const userSetup = document.getElementById("user-setup");
-    const usernameInput = document.getElementById("username");
-    const joinBtn = document.getElementById("join-btn");
-    const messages = document.getElementById("messages");
-    const formInput = document.getElementById("message-input");
-    const sendButton = document.getElementById("send-btn");
-    const typingIndicator = document.getElementById("typing-indicator");
+  <!-- Selector de chat -->
+  <div id="chat-select">
+    <select id="chat-type">
+      <option value="public">Público</option>
+    </select>
+    <input id="chat-target" placeholder="Usuario o grupo"/>
+  </div>
 
-    // Recuperar nickname guardado en localStorage
-    let nickname = localStorage.getItem("nickname") || "";
+  <ul id="messages"></ul>
 
-    if(nickname !== ""){
-      userSetup.style.display = "none";
-    }
+  <div id="input-area">
+    <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
+    <button id="send-btn">➤</button>
+  </div>
+</div>
 
-    // Función para mostrar mensaje
-    function addMessage(msg, isYou = false) {
-      const li = document.createElement("li");
-      li.className = "message " + (isYou ? "you" : "other");
-      li.innerHTML = `
-        <span class="name">${msg.name}</span>
-        <span class="text">${msg.text}</span>
-        <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-      `;
-      messages.appendChild(li);
-      messages.scrollTop = messages.scrollHeight;
-    }
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
 
-    // Unirse con nickname
-    joinBtn.addEventListener("click", () => {
-      const name = usernameInput.value.trim();
-      if(name){
-        nickname = name;
-        localStorage.setItem("nickname", nickname); // Guardar nickname
-        userSetup.style.display = "none";
-      }
-    });
+const userSetup = document.getElementById("user-setup");
+const usernameInput = document.getElementById("username");
+const joinBtn = document.getElementById("join-btn");
+const messages = document.getElementById("messages");
+const formInput = document.getElementById("message-input");
+const sendButton = document.getElementById("send-btn");
+const typingIndicator = document.getElementById("typing-indicator");
+const chatTypeSelect = document.getElementById("chat-type");
+const chatTargetInput = document.getElementById("chat-target");
 
-    // Recibir historial
-    socket.on("chat history", (history) => {
-      history.forEach(msg => addMessage(msg, msg.name === nickname));
-    });
+let nickname = localStorage.getItem("nickname") || "";
+let currentChat = "public";
+let currentTarget = null;
 
-    // Recibir mensaje nuevo
-    socket.on("chat message", (msg) => {
-      addMessage(msg, msg.name === nickname);
-    });
+if(nickname !== "") userSetup.style.display = "none";
 
-    // Enviar mensaje
-    sendButton.addEventListener("click", () => {
-      if(formInput.value.trim() !== "" && nickname !== ""){
-        const msg = { name: nickname, text: formInput.value };
-        socket.emit("chat message", msg);
-        formInput.value = "";
-      }
-    });
+// Función para mostrar mensajes
+function addMessage(msg){
+  // Filtrar según chat
+  if(msg.type === "public" && currentChat !== "public") return;
+  if(msg.type === "private" && ((currentChat !== "private") || (msg.name !== nickname && msg.target !== nickname))) return;
+  if(msg.type === "group" && ((currentChat !== "group") || msg.target !== currentTarget)) return;
 
-    formInput.addEventListener("keypress", (e) => {
-      if(e.key === "Enter") sendButton.click();
-    });
+  const li = document.createElement("li");
+  li.className = "message " + (msg.name === nickname ? "you" : "other");
+  li.innerHTML = `<span class="name">${msg.name}</span>
+                  <span class="text">${msg.text}</span>
+                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>`;
+  messages.appendChild(li);
+  messages.scrollTop = messages.scrollHeight;
+}
 
-    // Indicador "está escribiendo..."
-    formInput.addEventListener("input", () => {
-      if(nickname !== "") socket.emit("typing", nickname);
-    });
+// Unirse con nickname
+joinBtn.addEventListener("click", ()=>{
+  const name = usernameInput.value.trim();
+  if(name){
+    nickname = name;
+    localStorage.setItem("nickname", nickname);
+    socket.emit("set nickname", nickname);
+    userSetup.style.display = "none";
+    socket.emit("get history");
+  }
+});
 
-    socket.on("typing", (name) => {
-      if(name !== nickname){
-        typingIndicator.textContent = `${name} está escribiendo...`;
-        clearTimeout(window.typingTimeout);
-        window.typingTimeout = setTimeout(() => typingIndicator.textContent = "", 2000);
-      }
-    });
-  </script>
+// Cambiar chat
+chatTypeSelect.addEventListener("change", ()=>{
+  currentChat = chatTypeSelect.value;
+  currentTarget = chatTargetInput.value || null;
+  messages.innerHTML = "";
+  socket.emit("get history");
+});
+chatTargetInput.addEventListener("input", ()=>{
+  currentTarget = chatTargetInput.value || null;
+});
+
+// Recibir historial
+socket.on("chat history", history => history.forEach(addMessage));
+
+// Recibir mensaje
+socket.on("chat message", addMessage);
+
+// Enviar mensaje
+sendButton.addEventListener("click", ()=>{
+  if(formInput.value.trim() === "" || !nickname) return;
+  const text = formInput.value;
+  if(currentChat === "public") socket.emit("chat public", text);
+  else if(currentChat === "private") socket.emit("chat private", {target: currentTarget, text});
+  else if(currentChat === "group") socket.emit("chat group", {groupName: currentTarget, text});
+  formInput.value = "";
+});
+
+formInput.addEventListener("keypress", e=>{
+  if(e.key==="Enter") sendButton.click();
+});
+
+// Indicador "está escribiendo"
+formInput.addEventListener("input", ()=>{
+  socket.emit("typing", {type: currentChat, target: currentTarget});
+});
+socket.on("typing", name=>{
+  if(name !== nickname){
+    typingIndicator.textContent = `${name} está escribiendo...`;
+    clearTimeout(window.typingTimeout);
+    window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
+  }
+});
+</script>
 </body>
 </html>
