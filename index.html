@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>💬 Chat Completo</title>
+<title>💬 Chat WhatsApp Style</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,7 +11,9 @@
   <div id="sidebar">
     <div id="sidebar-header">💬 Chat</div>
     <input id="search-contact" placeholder="Buscar..."/>
-    <ul id="chat-list"></ul>
+    <ul id="chat-list">
+      <!-- Lista de usuarios y grupos -->
+    </ul>
     <button id="create-group-btn">Crear Grupo</button>
   </div>
 
@@ -23,12 +25,12 @@
     <ul id="messages"></ul>
     <div id="input-area">
       <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
-      <input type="file" id="image-input"/>
       <button id="send-btn">➤</button>
     </div>
   </div>
 </div>
 
+<!-- Modal nickname -->
 <div id="nickname-modal">
   <input id="username" placeholder="Escribe tu nickname"/>
   <button id="join-btn">Unirse</button>
@@ -41,27 +43,46 @@ const socket = io();
 let nickname = localStorage.getItem("nickname") || "";
 let currentChat = "public";
 let currentTarget = null;
-let allMessages = [];
-let unread = {};
-let userList = [];
 
-const nicknameModal=document.getElementById("nickname-modal");
-const usernameInput=document.getElementById("username");
-const joinBtn=document.getElementById("join-btn");
-const messages=document.getElementById("messages");
-const messageInput=document.getElementById("message-input");
-const sendBtn=document.getElementById("send-btn");
-const typingIndicator=document.getElementById("typing-indicator");
-const chatList=document.getElementById("chat-list");
-const chatTitle=document.getElementById("chat-title");
-const createGroupBtn=document.getElementById("create-group-btn");
-const imageInput=document.getElementById("image-input");
+const nicknameModal = document.getElementById("nickname-modal");
+const usernameInput = document.getElementById("username");
+const joinBtn = document.getElementById("join-btn");
+const messages = document.getElementById("messages");
+const messageInput = document.getElementById("message-input");
+const sendBtn = document.getElementById("send-btn");
+const typingIndicator = document.getElementById("typing-indicator");
+const chatList = document.getElementById("chat-list");
+const chatTitle = document.getElementById("chat-title");
+const createGroupBtn = document.getElementById("create-group-btn");
 
-if(!nickname){ nicknameModal.style.display="flex"; } 
-else{ socket.emit("set nickname", nickname); }
+// Pedir nickname si no existe
+if(!nickname){
+  nicknameModal.style.display="flex";
+} else {
+  socket.emit("set nickname", nickname);
+}
 
+// Función para agregar mensaje
+function addMessage(msg){
+  if(msg.type==="public" && currentChat!=="public") return;
+  if(msg.type==="private" && currentChat!=="private"){
+    if(msg.name!==nickname && msg.target!==nickname) return;
+  }
+  if(msg.type==="group" && currentChat!=="group") return;
+  if(msg.type==="group" && msg.target!==currentTarget) return;
+
+  const li = document.createElement("li");
+  li.className = "message " + (msg.name===nickname?"you":"other");
+  li.innerHTML = `<span class="name">${msg.name}</span>
+                  <span class="text">${msg.text}</span>
+                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
+  messages.appendChild(li);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+// Unirse con nickname
 joinBtn.addEventListener("click", ()=>{
-  const name=usernameInput.value.trim();
+  const name = usernameInput.value.trim();
   if(name){
     nickname=name;
     localStorage.setItem("nickname", nickname);
@@ -70,143 +91,99 @@ joinBtn.addEventListener("click", ()=>{
   }
 });
 
-function addMessage(msg){
-  const li=document.createElement("li");
-  li.className="message "+(msg.name===nickname?"you":"other");
+// Enviar mensaje
+sendBtn.addEventListener("click", ()=>{
+  const text = messageInput.value.trim();
+  if(!text || !nickname) return;
 
-  let content;
-  if(msg.type==="image") content=`<img src="${msg.data}" class="message-img"/>`;
-  else content=`<span class="text">${msg.text}</span>`;
+  if(currentChat==="public") socket.emit("chat public", text);
+  else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
+  else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
 
-  li.innerHTML=`<span class="name">${msg.name}</span>${content}
-                <span class="time">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
-  messages.appendChild(li);
-  messages.scrollTop=messages.scrollHeight;
-}
+  messageInput.value="";
+});
 
-function renderMessages(){
-  messages.innerHTML="";
-  allMessages.forEach(msg=>{
-    if(currentChat==="public" && msg.type==="public") addMessage(msg);
-    else if(currentChat==="private" && msg.type==="private"){
-      if((msg.name===nickname && msg.target===currentTarget) ||
-         (msg.name===currentTarget && msg.target===nickname)) addMessage(msg);
-    }
-    else if(currentChat==="group" && msg.type==="group" && msg.target===currentTarget){
-      addMessage(msg);
-    }
-  });
-}
+messageInput.addEventListener("keypress", e=>{
+  if(e.key==="Enter") sendBtn.click();
+});
 
-function renderChatList(){
+// Indicador escribiendo
+messageInput.addEventListener("input", ()=>{
+  socket.emit("typing",{type:currentChat,target:currentTarget});
+});
+socket.on("typing", name=>{
+  if(name!==nickname){
+    typingIndicator.textContent = `${name} está escribiendo...`;
+    clearTimeout(window.typingTimeout);
+    window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
+  }
+});
+
+// Historial
+socket.on("chat history", history=>history.forEach(addMessage));
+
+// Mensajes nuevos
+socket.on("chat message", addMessage);
+
+// Lista de usuarios
+socket.on("user list", users=>{
   chatList.innerHTML="";
+  // Añadir público
   const generalLi=document.createElement("li");
   generalLi.textContent="General";
   generalLi.className="public";
-  generalLi.addEventListener("click",()=>selectChat("public"));
+  generalLi.addEventListener("click", ()=>{
+    currentChat="public";
+    currentTarget=null;
+    chatTitle.textContent="General";
+    messages.innerHTML="";
+    socket.emit("get history");
+  });
   chatList.appendChild(generalLi);
 
-  userList.forEach(user=>{
+  users.forEach(user=>{
     if(user!==nickname){
       const li=document.createElement("li");
       li.textContent=user;
       li.className="contact";
-      if(unread[user]){
-        const dot=document.createElement("span");
-        dot.className="unread-dot";
-        li.appendChild(dot);
-      }
-      li.addEventListener("click",()=>{
-        selectChat("private",user);
-        unread[user]=0;
-        renderChatList();
+      li.addEventListener("click", ()=>{
+        currentChat="private";
+        currentTarget=user;
+        chatTitle.textContent=user;
+        messages.innerHTML="";
+        socket.emit("get history");
       });
       chatList.appendChild(li);
     }
   });
-}
-
-function selectChat(type,target=null){
-  currentChat=type;
-  currentTarget=target;
-  chatTitle.textContent=target||"General";
-  renderMessages();
-}
-
-sendBtn.addEventListener("click",()=>{
-  const text=messageInput.value.trim();
-  if(!text||!nickname) return;
-  if(currentChat==="public") socket.emit("chat public",text);
-  else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
-  else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
-  messageInput.value="";
 });
 
-messageInput.addEventListener("keypress",e=>{
-  if(e.key==="Enter") sendBtn.click();
-});
-
-messageInput.addEventListener("input",()=>socket.emit("typing",{type:currentChat,target:currentTarget}));
-socket.on("typing",name=>{
-  if(name!==nickname){
-    typingIndicator.textContent=`${name} está escribiendo...`;
-    clearTimeout(window.typingTimeout);
-    window.typingTimeout=setTimeout(()=>typingIndicator.textContent="",2000);
-  }
-});
-
-socket.on("chat history",history=>{
-  allMessages=history;
-  renderMessages();
-});
-
-socket.on("chat message",msg=>{
-  allMessages.push(msg);
-  if(msg.type==="private"){
-    const other=(msg.name===nickname?msg.target:msg.name);
-    if(currentChat!=="private" || currentTarget!==other) unread[other]=(unread[other]||0)+1;
-  }
-  renderMessages();
-  renderChatList();
-});
-
-socket.on("user list",users=>{
-  userList=users;
-  renderChatList();
-});
-
-socket.on("group list",groups=>{
+// Lista de grupos
+socket.on("group list", groups=>{
   groups.forEach(group=>{
     const li=document.createElement("li");
     li.textContent=group;
     li.className="group";
-    li.addEventListener("click",()=>selectChat("group",group));
+    li.addEventListener("click", ()=>{
+      currentChat="group";
+      currentTarget=group;
+      chatTitle.textContent=group;
+      messages.innerHTML="";
+      socket.emit("get history");
+    });
     chatList.appendChild(li);
   });
 });
 
-createGroupBtn.addEventListener("click",()=>{
-  const name=prompt("Nombre del grupo:");
-  const members=prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
-  if(name&&members.length>0){
+// Crear grupo
+createGroupBtn.addEventListener("click", ()=>{
+  const name = prompt("Nombre del grupo:");
+  const members = prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
+  if(name && members.length>0){
     members.push(nickname);
     socket.emit("create group",{groupName:name,members});
   }
 });
-
-imageInput.addEventListener("change",()=>{
-  const file=imageInput.files[0];
-  if(!file) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const dataURL=e.target.result;
-    if(currentChat==="public") socket.emit("chat image",{data:dataURL});
-    else if(currentChat==="private") socket.emit("chat image",{data:dataURL,target:currentTarget});
-    else if(currentChat==="group") socket.emit("chat image",{data:dataURL,target:currentTarget});
-  };
-  reader.readAsDataURL(file);
-});
 </script>
-
 </body>
 </html>
