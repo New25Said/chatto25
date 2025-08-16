@@ -1,193 +1,103 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>💬 Chat WhatsApp Style</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
+const fs = require("fs");
 
-<div id="chat-app">
-  <div id="sidebar">
-    <div id="sidebar-header">💬 Chat</div>
-    <input id="search-contact" placeholder="Buscar..."/>
-    <ul id="chat-list"></ul>
-    <button id="create-group-btn">Crear Grupo</button>
-  </div>
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-  <div id="chat-panel">
-    <div id="chat-header-panel">
-      <span id="chat-title">General</span>
-      <span id="typing-indicator"></span>
-    </div>
-    <ul id="messages"></ul>
-    <div id="input-area">
-      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
-      <button id="send-btn">➤</button>
-    </div>
-  </div>
-</div>
+app.use(express.static(path.join(__dirname)));
 
-<!-- Modal nickname -->
-<div id="nickname-modal">
-  <input id="username" placeholder="Escribe tu nickname"/>
-  <button id="join-btn">Unirse</button>
-</div>
+const HISTORY_FILE = path.join(__dirname, "chatHistory.json");
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-const socket = io();
-
-let nickname = localStorage.getItem("nickname") || "";
-let currentChat = "public";
-let currentTarget = null;
-let allMessages = []; // Historial completo en el cliente
-
-const nicknameModal = document.getElementById("nickname-modal");
-const usernameInput = document.getElementById("username");
-const joinBtn = document.getElementById("join-btn");
-const messages = document.getElementById("messages");
-const messageInput = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-btn");
-const typingIndicator = document.getElementById("typing-indicator");
-const chatList = document.getElementById("chat-list");
-const chatTitle = document.getElementById("chat-title");
-const createGroupBtn = document.getElementById("create-group-btn");
-
-// Mostrar modal si no hay nickname
-if(!nickname){
-  nicknameModal.style.display="flex";
-} else {
-  socket.emit("set nickname", nickname); // enviar nickname al servidor
+let chatHistory = [];
+if(fs.existsSync(HISTORY_FILE)){
+  try { chatHistory = JSON.parse(fs.readFileSync(HISTORY_FILE,"utf8")); }
+  catch(err){ console.error("Error al leer historial:", err); }
 }
 
-// Función para agregar un mensaje al DOM
-function addMessage(msg){
-  const li = document.createElement("li");
-  li.className = "message " + (msg.name===nickname?"you":"other");
-  li.innerHTML = `<span class="name">${msg.name}</span>
-                  <span class="text">${msg.text}</span>
-                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
-  messages.appendChild(li);
-  messages.scrollTop = messages.scrollHeight;
+let users = {};   // socket.id -> nickname
+let groups = {};  // groupName -> [nicknames]
+
+function saveHistory(){
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory,null,2));
 }
 
-// Filtrar y renderizar mensajes según chat activo
-function renderMessages(){
-  messages.innerHTML = "";
-  allMessages.forEach(msg=>{
-    if(currentChat==="public" && msg.type==="public") addMessage(msg);
-    else if(currentChat==="private" && msg.type==="private"){
-      if((msg.name===nickname && msg.target===currentTarget) ||
-         (msg.name===currentTarget && msg.target===nickname)) addMessage(msg);
-    }
-    else if(currentChat==="group" && msg.type==="group" && msg.target===currentTarget){
-      addMessage(msg);
+io.on("connection", (socket) => {
+  console.log("✅ Usuario conectado:", socket.id);
+
+  socket.on("set nickname", (nickname) => {
+    // Reemplazar socket.id si nickname ya existe
+    const oldId = Object.keys(users).find(id => users[id] === nickname);
+    if(oldId && oldId !== socket.id) delete users[oldId];
+
+    users[socket.id] = nickname;
+
+    io.emit("user list", Object.values(users));
+    socket.emit("chat history", chatHistory);
+    socket.emit("group list", Object.keys(groups));
+  });
+
+  socket.on("chat public", (text) => {
+    const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "public", target: null };
+    chatHistory.push(msg);
+    saveHistory();
+    io.emit("chat message", msg);
+  });
+
+  socket.on("chat private", ({target, text}) => {
+    const targetId = Object.keys(users).find(id => users[id] === target);
+    if(targetId){
+      const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "private", target };
+      chatHistory.push(msg);
+      saveHistory();
+      socket.emit("chat message", msg);
+      io.to(targetId).emit("chat message", msg);
     }
   });
-}
 
-// Unirse con nickname
-joinBtn.addEventListener("click", ()=>{
-  const name = usernameInput.value.trim();
-  if(name){
-    nickname=name;
-    localStorage.setItem("nickname", nickname);
-    nicknameModal.style.display="none";
-    socket.emit("set nickname", nickname);
-  }
-});
-
-// Enviar mensaje
-sendBtn.addEventListener("click", ()=>{
-  const text = messageInput.value.trim();
-  if(!text || !nickname) return;
-
-  if(currentChat==="public") socket.emit("chat public", text);
-  else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
-  else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
-
-  messageInput.value="";
-});
-
-// Enter para enviar
-messageInput.addEventListener("keypress", e=>{
-  if(e.key==="Enter") sendBtn.click();
-});
-
-// Indicador escribiendo
-messageInput.addEventListener("input", ()=>{
-  socket.emit("typing",{type:currentChat,target:currentTarget});
-});
-socket.on("typing", name=>{
-  if(name!==nickname){
-    typingIndicator.textContent = `${name} está escribiendo...`;
-    clearTimeout(window.typingTimeout);
-    window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
-  }
-});
-
-// Recibir historial inicial
-socket.on("chat history", history=>{
-  allMessages = history; // guardar todo el historial
-  renderMessages();       // renderizar según chat activo
-});
-
-// Recibir nuevos mensajes
-socket.on("chat message", msg=>{
-  allMessages.push(msg);  // añadir al historial
-  renderMessages();       // actualizar DOM
-});
-
-// Lista de usuarios
-socket.on("user list", users=>{
-  chatList.innerHTML="";
-  // Público
-  const generalLi=document.createElement("li");
-  generalLi.textContent="General";
-  generalLi.className="public";
-  generalLi.addEventListener("click", ()=>selectChat("public"));
-  chatList.appendChild(generalLi);
-
-  users.forEach(user=>{
-    if(user!==nickname){
-      const li=document.createElement("li");
-      li.textContent=user;
-      li.className="contact";
-      li.addEventListener("click", ()=>selectChat("private", user));
-      chatList.appendChild(li);
+  socket.on("chat group", ({groupName, text}) => {
+    if(groups[groupName] && groups[groupName].includes(users[socket.id])){
+      const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type:"group", target: groupName };
+      chatHistory.push(msg);
+      saveHistory();
+      Object.entries(users).forEach(([sid,nick])=>{
+        if(groups[groupName].includes(nick)){
+          io.to(sid).emit("chat message", msg);
+        }
+      });
     }
+  });
+
+  socket.on("create group", ({groupName, members})=>{
+    if(!groups[groupName]){
+      groups[groupName] = members;
+      io.emit("group list", Object.keys(groups));
+    }
+  });
+
+  socket.on("typing", ({type, target})=>{
+    if(type==="public") socket.broadcast.emit("typing", users[socket.id]);
+    else if(type==="private" && target){
+      const targetId = Object.keys(users).find(id => users[id] === target);
+      if(targetId) io.to(targetId).emit("typing", users[socket.id]);
+    }
+    else if(type==="group" && target){
+      groups[target].forEach(nick=>{
+        const sid = Object.keys(users).find(id=>users[id]===nick);
+        if(sid && sid!==socket.id) io.to(sid).emit("typing", users[socket.id]);
+      });
+    }
+  });
+
+  socket.on("disconnect", ()=>{
+    console.log("❌ Usuario desconectado:", socket.id);
+    delete users[socket.id];
+    io.emit("user list", Object.values(users));
   });
 });
 
-// Lista de grupos
-socket.on("group list", groups=>{
-  groups.forEach(group=>{
-    const li=document.createElement("li");
-    li.textContent=group;
-    li.className="group";
-    li.addEventListener("click", ()=>selectChat("group", group));
-    chatList.appendChild(li);
-  });
-});
-
-// Crear grupo
-createGroupBtn.addEventListener("click", ()=>{
-  const name = prompt("Nombre del grupo:");
-  const members = prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
-  if(name && members.length>0){
-    members.push(nickname);
-    socket.emit("create group",{groupName:name,members});
-  }
-});
-
-// Cambiar de chat
-function selectChat(type, target=null){
-  currentChat = type;
-  currentTarget = target;
-  chatTitle.textContent = target || "General";
-  renderMessages();
-}
-</script>
-</body>
-</html>
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, ()=>console.log(`✅ Servidor chat listo en puerto ${PORT}`));
