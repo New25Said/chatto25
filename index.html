@@ -22,6 +22,8 @@
   <div id="chat-select">
     <select id="chat-type">
       <option value="public">Público</option>
+      <option value="private">Privado</option>
+      <option value="group">Grupo</option>
     </select>
     <input id="chat-target" placeholder="Usuario o grupo"/>
   </div>
@@ -52,20 +54,26 @@ let nickname = localStorage.getItem("nickname") || "";
 let currentChat = "public";
 let currentTarget = null;
 
-if(nickname !== "") userSetup.style.display = "none";
+if(nickname!=="") {
+  userSetup.style.display="none";
+  socket.emit("set nickname", nickname);
+  socket.emit("get history");
+}
 
-// Función para mostrar mensajes
+// Mostrar mensaje
 function addMessage(msg){
-  // Filtrar según chat
-  if(msg.type === "public" && currentChat !== "public") return;
-  if(msg.type === "private" && ((currentChat !== "private") || (msg.name !== nickname && msg.target !== nickname))) return;
-  if(msg.type === "group" && ((currentChat !== "group") || msg.target !== currentTarget)) return;
+  if(msg.type==="public" && currentChat!=="public") return;
+  if(msg.type==="private" && currentChat!=="private") {
+    if(msg.name!==nickname && msg.target!==nickname) return;
+  }
+  if(msg.type==="group" && currentChat!=="group") return;
+  if(msg.type==="group" && msg.target!==currentTarget) return;
 
   const li = document.createElement("li");
-  li.className = "message " + (msg.name === nickname ? "you" : "other");
+  li.className = "message " + (msg.name===nickname?"you":"other");
   li.innerHTML = `<span class="name">${msg.name}</span>
                   <span class="text">${msg.text}</span>
-                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>`;
+                  <span class="time">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
   messages.appendChild(li);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -77,8 +85,7 @@ joinBtn.addEventListener("click", ()=>{
     nickname = name;
     localStorage.setItem("nickname", nickname);
     socket.emit("set nickname", nickname);
-    userSetup.style.display = "none";
-    socket.emit("get history");
+    userSetup.style.display="none";
   }
 });
 
@@ -86,8 +93,7 @@ joinBtn.addEventListener("click", ()=>{
 chatTypeSelect.addEventListener("change", ()=>{
   currentChat = chatTypeSelect.value;
   currentTarget = chatTargetInput.value || null;
-  messages.innerHTML = "";
-  socket.emit("get history");
+  messages.innerHTML="";
 });
 chatTargetInput.addEventListener("input", ()=>{
   currentTarget = chatTargetInput.value || null;
@@ -96,29 +102,31 @@ chatTargetInput.addEventListener("input", ()=>{
 // Recibir historial
 socket.on("chat history", history => history.forEach(addMessage));
 
-// Recibir mensaje
+// Recibir mensaje nuevo
 socket.on("chat message", addMessage);
 
 // Enviar mensaje
 sendButton.addEventListener("click", ()=>{
-  if(formInput.value.trim() === "" || !nickname) return;
-  const text = formInput.value;
-  if(currentChat === "public") socket.emit("chat public", text);
-  else if(currentChat === "private") socket.emit("chat private", {target: currentTarget, text});
-  else if(currentChat === "group") socket.emit("chat group", {groupName: currentTarget, text});
-  formInput.value = "";
+  const text = formInput.value.trim();
+  if(!text || !nickname) return;
+
+  if(currentChat==="public") socket.emit("chat public", text);
+  else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
+  else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
+  
+  formInput.value="";
 });
 
 formInput.addEventListener("keypress", e=>{
   if(e.key==="Enter") sendButton.click();
 });
 
-// Indicador "está escribiendo"
+// Indicador escribiendo
 formInput.addEventListener("input", ()=>{
-  socket.emit("typing", {type: currentChat, target: currentTarget});
+  socket.emit("typing",{type:currentChat,target:currentTarget});
 });
 socket.on("typing", name=>{
-  if(name !== nickname){
+  if(name!==nickname){
     typingIndicator.textContent = `${name} está escribiendo...`;
     clearTimeout(window.typingTimeout);
     window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
