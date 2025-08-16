@@ -104,3 +104,21 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, ()=>console.log(`✅ Servidor chat listo en puerto ${PORT}`));
+const imageInput = document.getElementById("image-input");
+const imageBtn = document.getElementById("image-btn");
+
+imageBtn.addEventListener("click", () => imageInput.click());
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const imgData = reader.result; // base64
+    if (currentChat === "public") socket.emit("chat public image", imgData);
+    else if (currentChat === "private") socket.emit("chat private image", { target: currentTarget, img: imgData });
+    else if (currentChat === "group") socket.emit("chat group image", { groupName: currentTarget, img: imgData });
+  };
+  reader.readAsDataURL(file);
+});
