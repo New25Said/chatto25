@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <title>💬 Chat WhatsApp Style</title>
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* Círculo verde para mensajes no leídos */
+  .unread-dot{
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: #2ecc71; /* verde */
+    border-radius: 50%;
+    margin-left: 6px;
+  }
+</style>
 </head>
 <body>
 
@@ -41,7 +52,8 @@ const socket = io();
 let nickname = localStorage.getItem("nickname") || "";
 let currentChat = "public";
 let currentTarget = null;
-let allMessages = []; // Historial completo en el cliente
+let allMessages = []; // Historial completo
+let unread = {};      // Mensajes no leídos por usuario
 
 const nicknameModal = document.getElementById("nickname-modal");
 const usernameInput = document.getElementById("username");
@@ -61,7 +73,7 @@ if(!nickname){
   socket.emit("set nickname", nickname);
 }
 
-// Función para agregar un mensaje al DOM
+// Agregar mensaje al DOM
 function addMessage(msg){
   const li = document.createElement("li");
   li.className = "message " + (msg.name===nickname?"you":"other");
@@ -72,7 +84,7 @@ function addMessage(msg){
   messages.scrollTop = messages.scrollHeight;
 }
 
-// Filtrar y renderizar mensajes según chat activo
+// Renderizar mensajes del chat actual
 function renderMessages(){
   messages.innerHTML = "";
   allMessages.forEach(msg=>{
@@ -85,6 +97,47 @@ function renderMessages(){
       addMessage(msg);
     }
   });
+}
+
+// Renderizar lista de chats con indicadores no leídos
+function renderChatList(usersList){
+  chatList.innerHTML="";
+  // Público
+  const generalLi=document.createElement("li");
+  generalLi.textContent="General";
+  generalLi.className="public";
+  generalLi.addEventListener("click", ()=>selectChat("public"));
+  chatList.appendChild(generalLi);
+
+  usersList.forEach(user=>{
+    if(user!==nickname){
+      const li=document.createElement("li");
+      li.textContent = user;
+
+      // Círculo verde si hay mensajes no leídos
+      if(unread[user]){
+        const dot = document.createElement("span");
+        dot.className="unread-dot";
+        li.appendChild(dot);
+      }
+
+      li.className="contact";
+      li.addEventListener("click", ()=>{
+        selectChat("private", user);
+        unread[user] = 0; // marcar como leído
+        renderChatList(usersList);
+      });
+      chatList.appendChild(li);
+    }
+  });
+}
+
+// Cambiar de chat
+function selectChat(type, target=null){
+  currentChat = type;
+  currentTarget = target;
+  chatTitle.textContent = target || "General";
+  renderMessages();
 }
 
 // Unirse con nickname
@@ -110,7 +163,6 @@ sendBtn.addEventListener("click", ()=>{
   messageInput.value="";
 });
 
-// Enter para enviar
 messageInput.addEventListener("keypress", e=>{
   if(e.key==="Enter") sendBtn.click();
 });
@@ -127,37 +179,30 @@ socket.on("typing", name=>{
   }
 });
 
-// Recibir historial inicial
+// Recibir historial
 socket.on("chat history", history=>{
-  allMessages = history; // guardar todo el historial
-  renderMessages();       // renderizar según chat activo
+  allMessages = history;
+  renderMessages();
 });
 
 // Recibir nuevos mensajes
 socket.on("chat message", msg=>{
-  allMessages.push(msg);  // añadir al historial
-  renderMessages();       // actualizar DOM
+  allMessages.push(msg);
+
+  // Mensajes privados no leídos
+  if(msg.type==="private"){
+    const other = (msg.name===nickname ? msg.target : msg.name);
+    if(currentChat!=="private" || currentTarget!==other){
+      unread[other] = (unread[other] || 0) + 1;
+    }
+  }
+
+  renderMessages();
 });
 
 // Lista de usuarios
 socket.on("user list", users=>{
-  chatList.innerHTML="";
-  // Público
-  const generalLi=document.createElement("li");
-  generalLi.textContent="General";
-  generalLi.className="public";
-  generalLi.addEventListener("click", ()=>selectChat("public"));
-  chatList.appendChild(generalLi);
-
-  users.forEach(user=>{
-    if(user!==nickname){
-      const li=document.createElement("li");
-      li.textContent=user;
-      li.className="contact";
-      li.addEventListener("click", ()=>selectChat("private", user));
-      chatList.appendChild(li);
-    }
-  });
+  renderChatList(users);
 });
 
 // Lista de grupos
@@ -180,14 +225,6 @@ createGroupBtn.addEventListener("click", ()=>{
     socket.emit("create group",{groupName:name,members});
   }
 });
-
-// Cambiar de chat
-function selectChat(type, target=null){
-  currentChat = type;
-  currentTarget = target;
-  chatTitle.textContent = target || "General";
-  renderMessages();
-}
 </script>
 </body>
 </html>
