@@ -2,13 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>💬 Chat WhatsApp</title>
+<title>💬 Chat Completo</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-  .unread-dot{ display:inline-block;width:10px;height:10px;background:#2ecc71;border-radius:50%;margin-left:6px; }
-  #image-input{ display:inline-block;margin-left:5px; }
-  img.message-img{ max-width:200px; max-height:200px; border-radius:8px; margin-top:4px; }
-</style>
 </head>
 <body>
 
@@ -80,7 +75,7 @@ function addMessage(msg){
   li.className="message "+(msg.name===nickname?"you":"other");
 
   let content;
-  if(msg.type==="image") content=`<img class="message-img" src="${msg.data}"/>`;
+  if(msg.type==="image") content=`<img src="${msg.data}" class="message-img"/>`;
   else content=`<span class="text">${msg.text}</span>`;
 
   li.innerHTML=`<span class="name">${msg.name}</span>${content}
@@ -129,7 +124,7 @@ function renderChatList(){
       chatList.appendChild(li);
     }
   });
-});
+}
 
 function selectChat(type,target=null){
   currentChat=type;
@@ -212,5 +207,6 @@ imageInput.addEventListener("change",()=>{
   reader.readAsDataURL(file);
 });
 </script>
+
 </body>
 </html>
