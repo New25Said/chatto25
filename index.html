@@ -55,11 +55,15 @@ const chatTitle = document.getElementById("chat-title");
 const createGroupBtn = document.getElementById("create-group-btn");
 
 // Pedir nickname si no existe
-if(!nickname){
-  nicknameModal.style.display="flex";
+if (!nickname) {
+  nicknameModal.style.display = "flex";
 } else {
-  socket.emit("set nickname", nickname);
+  // aseguramos que se mande una vez conectado
+  socket.on("connect", () => {
+    socket.emit("set nickname", nickname);
+  });
 }
+
 
 // Función para agregar un mensaje al DOM
 function addMessage(msg){
