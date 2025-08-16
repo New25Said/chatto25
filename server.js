@@ -12,7 +12,7 @@ app.use(express.static(path.join(__dirname)));
 
 const HISTORY_FILE = path.join(__dirname, "chatHistory.json");
 
-// Cargar historial
+// Cargar historial si existe
 let chatHistory = [];
 if(fs.existsSync(HISTORY_FILE)){
   try {
@@ -22,87 +22,83 @@ if(fs.existsSync(HISTORY_FILE)){
   }
 }
 
-// Usuarios conectados
+// Usuarios y grupos
 let users = {}; // socket.id -> nickname
 let groups = {}; // groupName -> [nicknames]
 
-function saveHistory(){
+function saveHistory() {
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory,null,2));
 }
 
 io.on("connection", (socket) => {
   console.log("✅ Usuario conectado:", socket.id);
 
-  // Registrar nickname al conectarse
+  // Registrar nickname
   socket.on("set nickname", (nickname) => {
     users[socket.id] = nickname;
-    io.emit("user list", Object.values(users)); // actualizar lista de usuarios
+    io.emit("user list", Object.values(users));
+    socket.emit("chat history", chatHistory); // enviar historial al conectarse
   });
 
-  // Enviar historial filtrado
-  socket.on("get history", () => {
-    socket.emit("chat history", chatHistory);
-  });
-
-  // Chat público
-  socket.on("chat public", (msg) => {
-    const message = { id: socket.id, name: users[socket.id], text: msg, time: Date.now(), type: "public", target: null };
-    chatHistory.push(message);
+  // Mensajes públicos
+  socket.on("chat public", (text) => {
+    const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "public", target: null };
+    chatHistory.push(msg);
     saveHistory();
-    io.emit("chat message", message);
+    io.emit("chat message", msg);
   });
 
-  // Chat privado
+  // Mensajes privados
   socket.on("chat private", ({target, text}) => {
-    const targetSocketId = Object.keys(users).find(id => users[id] === target);
-    if(targetSocketId){
-      const message = { id: socket.id, name: users[socket.id], text, time: Date.now(), type:"private", target };
-      chatHistory.push(message);
+    const targetId = Object.keys(users).find(id => users[id] === target);
+    if(targetId){
+      const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "private", target };
+      chatHistory.push(msg);
       saveHistory();
-      socket.emit("chat message", message);
-      io.to(targetSocketId).emit("chat message", message);
+      socket.emit("chat message", msg);
+      io.to(targetId).emit("chat message", msg);
     }
   });
 
-  // Chat grupo
+  // Mensajes de grupo
   socket.on("chat group", ({groupName, text}) => {
     if(groups[groupName] && groups[groupName].includes(users[socket.id])){
-      const message = { id: socket.id, name: users[socket.id], text, time: Date.now(), type:"group", target: groupName };
-      chatHistory.push(message);
+      const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type:"group", target: groupName };
+      chatHistory.push(msg);
       saveHistory();
-      // Enviar solo a miembros del grupo
+      // enviar solo a miembros
       Object.entries(users).forEach(([sid,nick])=>{
         if(groups[groupName].includes(nick)){
-          io.to(sid).emit("chat message", message);
+          io.to(sid).emit("chat message", msg);
         }
       });
     }
   });
 
   // Crear grupo
-  socket.on("create group", ({groupName, members}) => {
+  socket.on("create group", ({groupName, members})=>{
     if(!groups[groupName]){
       groups[groupName] = members;
       io.emit("group list", Object.keys(groups));
     }
   });
 
-  // Indicador "está escribiendo"
-  socket.on("typing", ({type, target}) => {
-    if(type === "public"){
-      socket.broadcast.emit("typing", users[socket.id]);
-    } else if(type === "private" && target){
-      const targetSocketId = Object.keys(users).find(id => users[id] === target);
-      if(targetSocketId) io.to(targetSocketId).emit("typing", users[socket.id]);
-    } else if(type === "group" && target){
-      groups[target].forEach(nick => {
-        const sid = Object.keys(users).find(id => users[id] === nick);
-        if(sid && sid !== socket.id) io.to(sid).emit("typing", users[socket.id]);
+  // Indicador escribiendo
+  socket.on("typing", ({type, target})=>{
+    if(type==="public") socket.broadcast.emit("typing", users[socket.id]);
+    else if(type==="private" && target){
+      const targetId = Object.keys(users).find(id => users[id] === target);
+      if(targetId) io.to(targetId).emit("typing", users[socket.id]);
+    }
+    else if(type==="group" && target){
+      groups[target].forEach(nick=>{
+        const sid = Object.keys(users).find(id=>users[id]===nick);
+        if(sid && sid!==socket.id) io.to(sid).emit("typing", users[socket.id]);
       });
     }
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", ()=>{
     console.log("❌ Usuario desconectado:", socket.id);
     delete users[socket.id];
     io.emit("user list", Object.values(users));
@@ -110,4 +106,4 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`✅ Servidor chat listo en puerto ${PORT}`));
+server.listen(PORT, ()=>console.log(`✅ Servidor chat listo en puerto ${PORT}`));
