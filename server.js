@@ -12,32 +12,29 @@ app.use(express.static(path.join(__dirname)));
 
 const HISTORY_FILE = path.join(__dirname, "chatHistory.json");
 
-// Cargar historial si existe
+// Cargar historial
 let chatHistory = [];
 if(fs.existsSync(HISTORY_FILE)){
-  try {
-    chatHistory = JSON.parse(fs.readFileSync(HISTORY_FILE,"utf8"));
-  } catch(err){
-    console.error("Error al leer historial:", err);
-  }
+  try { chatHistory = JSON.parse(fs.readFileSync(HISTORY_FILE,"utf8")); }
+  catch(err){ console.error("Error al leer historial:", err); }
 }
 
 // Usuarios y grupos
-let users = {}; // socket.id -> nickname
-let groups = {}; // groupName -> [nicknames]
+let users = {};       // socket.id -> nickname
+let groups = {};      // groupName -> [nicknames]
 
-function saveHistory() {
+function saveHistory(){
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory,null,2));
 }
 
 io.on("connection", (socket) => {
   console.log("✅ Usuario conectado:", socket.id);
 
-  // Registrar nickname
   socket.on("set nickname", (nickname) => {
     users[socket.id] = nickname;
     io.emit("user list", Object.values(users));
-    socket.emit("chat history", chatHistory); // enviar historial al conectarse
+    socket.emit("chat history", chatHistory); // enviar historial
+    socket.emit("group list", Object.keys(groups));
   });
 
   // Mensajes públicos
@@ -55,8 +52,8 @@ io.on("connection", (socket) => {
       const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "private", target };
       chatHistory.push(msg);
       saveHistory();
-      socket.emit("chat message", msg);
-      io.to(targetId).emit("chat message", msg);
+      socket.emit("chat message", msg);        // tú ves tu mensaje
+      io.to(targetId).emit("chat message", msg); // destinatario
     }
   });
 
