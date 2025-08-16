@@ -2,68 +2,70 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>💬 Chat Completo</title>
+<title>💬 Chat WhatsApp Style</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div id="chat-container">
-  <div id="chat-header">
-    <span class="title">💬 Chat</span>
-    <span class="status" id="typing-indicator"></span>
+
+<div id="chat-app">
+  <div id="sidebar">
+    <div id="sidebar-header">💬 Chat</div>
+    <input id="search-contact" placeholder="Buscar..."/>
+    <ul id="chat-list">
+      <!-- Lista de usuarios y grupos -->
+    </ul>
+    <button id="create-group-btn">Crear Grupo</button>
   </div>
 
-  <!-- Nickname -->
-  <div id="user-setup">
-    <input id="username" placeholder="Escribe tu nickname"/>
-    <button id="join-btn">Unirse</button>
+  <div id="chat-panel">
+    <div id="chat-header-panel">
+      <span id="chat-title">General</span>
+      <span id="typing-indicator"></span>
+    </div>
+    <ul id="messages"></ul>
+    <div id="input-area">
+      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
+      <button id="send-btn">➤</button>
+    </div>
   </div>
+</div>
 
-  <!-- Selector de chat -->
-  <div id="chat-select">
-    <select id="chat-type">
-      <option value="public">Público</option>
-      <option value="private">Privado</option>
-      <option value="group">Grupo</option>
-    </select>
-    <input id="chat-target" placeholder="Usuario o grupo"/>
-  </div>
-
-  <ul id="messages"></ul>
-
-  <div id="input-area">
-    <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
-    <button id="send-btn">➤</button>
-  </div>
+<!-- Modal nickname -->
+<div id="nickname-modal">
+  <input id="username" placeholder="Escribe tu nickname"/>
+  <button id="join-btn">Unirse</button>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 
-const userSetup = document.getElementById("user-setup");
-const usernameInput = document.getElementById("username");
-const joinBtn = document.getElementById("join-btn");
-const messages = document.getElementById("messages");
-const formInput = document.getElementById("message-input");
-const sendButton = document.getElementById("send-btn");
-const typingIndicator = document.getElementById("typing-indicator");
-const chatTypeSelect = document.getElementById("chat-type");
-const chatTargetInput = document.getElementById("chat-target");
-
 let nickname = localStorage.getItem("nickname") || "";
 let currentChat = "public";
 let currentTarget = null;
 
-if(nickname!=="") {
-  userSetup.style.display="none";
+const nicknameModal = document.getElementById("nickname-modal");
+const usernameInput = document.getElementById("username");
+const joinBtn = document.getElementById("join-btn");
+const messages = document.getElementById("messages");
+const messageInput = document.getElementById("message-input");
+const sendBtn = document.getElementById("send-btn");
+const typingIndicator = document.getElementById("typing-indicator");
+const chatList = document.getElementById("chat-list");
+const chatTitle = document.getElementById("chat-title");
+const createGroupBtn = document.getElementById("create-group-btn");
+
+// Pedir nickname si no existe
+if(!nickname){
+  nicknameModal.style.display="flex";
+} else {
   socket.emit("set nickname", nickname);
-  socket.emit("get history");
 }
 
-// Mostrar mensaje
+// Función para agregar mensaje
 function addMessage(msg){
   if(msg.type==="public" && currentChat!=="public") return;
-  if(msg.type==="private" && currentChat!=="private") {
+  if(msg.type==="private" && currentChat!=="private"){
     if(msg.name!==nickname && msg.target!==nickname) return;
   }
   if(msg.type==="group" && currentChat!=="group") return;
@@ -73,7 +75,7 @@ function addMessage(msg){
   li.className = "message " + (msg.name===nickname?"you":"other");
   li.innerHTML = `<span class="name">${msg.name}</span>
                   <span class="text">${msg.text}</span>
-                  <span class="time">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
+                  <span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
   messages.appendChild(li);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -82,47 +84,31 @@ function addMessage(msg){
 joinBtn.addEventListener("click", ()=>{
   const name = usernameInput.value.trim();
   if(name){
-    nickname = name;
+    nickname=name;
     localStorage.setItem("nickname", nickname);
+    nicknameModal.style.display="none";
     socket.emit("set nickname", nickname);
-    userSetup.style.display="none";
   }
 });
 
-// Cambiar chat
-chatTypeSelect.addEventListener("change", ()=>{
-  currentChat = chatTypeSelect.value;
-  currentTarget = chatTargetInput.value || null;
-  messages.innerHTML="";
-});
-chatTargetInput.addEventListener("input", ()=>{
-  currentTarget = chatTargetInput.value || null;
-});
-
-// Recibir historial
-socket.on("chat history", history => history.forEach(addMessage));
-
-// Recibir mensaje nuevo
-socket.on("chat message", addMessage);
-
 // Enviar mensaje
-sendButton.addEventListener("click", ()=>{
-  const text = formInput.value.trim();
+sendBtn.addEventListener("click", ()=>{
+  const text = messageInput.value.trim();
   if(!text || !nickname) return;
 
   if(currentChat==="public") socket.emit("chat public", text);
   else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
   else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
-  
-  formInput.value="";
+
+  messageInput.value="";
 });
 
-formInput.addEventListener("keypress", e=>{
-  if(e.key==="Enter") sendButton.click();
+messageInput.addEventListener("keypress", e=>{
+  if(e.key==="Enter") sendBtn.click();
 });
 
 // Indicador escribiendo
-formInput.addEventListener("input", ()=>{
+messageInput.addEventListener("input", ()=>{
   socket.emit("typing",{type:currentChat,target:currentTarget});
 });
 socket.on("typing", name=>{
@@ -130,6 +116,72 @@ socket.on("typing", name=>{
     typingIndicator.textContent = `${name} está escribiendo...`;
     clearTimeout(window.typingTimeout);
     window.typingTimeout = setTimeout(()=>typingIndicator.textContent="",2000);
+  }
+});
+
+// Historial
+socket.on("chat history", history=>history.forEach(addMessage));
+
+// Mensajes nuevos
+socket.on("chat message", addMessage);
+
+// Lista de usuarios
+socket.on("user list", users=>{
+  chatList.innerHTML="";
+  // Añadir público
+  const generalLi=document.createElement("li");
+  generalLi.textContent="General";
+  generalLi.className="public";
+  generalLi.addEventListener("click", ()=>{
+    currentChat="public";
+    currentTarget=null;
+    chatTitle.textContent="General";
+    messages.innerHTML="";
+    socket.emit("get history");
+  });
+  chatList.appendChild(generalLi);
+
+  users.forEach(user=>{
+    if(user!==nickname){
+      const li=document.createElement("li");
+      li.textContent=user;
+      li.className="contact";
+      li.addEventListener("click", ()=>{
+        currentChat="private";
+        currentTarget=user;
+        chatTitle.textContent=user;
+        messages.innerHTML="";
+        socket.emit("get history");
+      });
+      chatList.appendChild(li);
+    }
+  });
+});
+
+// Lista de grupos
+socket.on("group list", groups=>{
+  groups.forEach(group=>{
+    const li=document.createElement("li");
+    li.textContent=group;
+    li.className="group";
+    li.addEventListener("click", ()=>{
+      currentChat="group";
+      currentTarget=group;
+      chatTitle.textContent=group;
+      messages.innerHTML="";
+      socket.emit("get history");
+    });
+    chatList.appendChild(li);
+  });
+});
+
+// Crear grupo
+createGroupBtn.addEventListener("click", ()=>{
+  const name = prompt("Nombre del grupo:");
+  const members = prompt("Miembros separados por coma:").split(",").map(m=>m.trim());
+  if(name && members.length>0){
+    members.push(nickname);
+    socket.emit("create group",{groupName:name,members});
   }
 });
 </script>
