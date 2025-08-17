@@ -21,13 +21,10 @@
       <span id="typing-indicator"></span>
     </div>
     <ul id="messages"></ul>
-<div id="input-area">
-  <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
-  <input type="file" id="image-input" accept="image/*" style="display:none"/>
-  <button id="image-btn">📎</button>
-  <button id="send-btn">➤</button>
-</div>
-
+    <div id="input-area">
+      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
+      <button id="send-btn">➤</button>
+    </div>
   </div>
 </div>
 
@@ -58,15 +55,11 @@ const chatTitle = document.getElementById("chat-title");
 const createGroupBtn = document.getElementById("create-group-btn");
 
 // Pedir nickname si no existe
-if (!nickname) {
-  nicknameModal.style.display = "flex";
+if(!nickname){
+  nicknameModal.style.display="flex";
 } else {
-  // aseguramos que se mande una vez conectado
-  socket.on("connect", () => {
-    socket.emit("set nickname", nickname);
-  });
+  socket.emit("set nickname", nickname);
 }
-
 
 // Función para agregar un mensaje al DOM
 function addMessage(msg){
