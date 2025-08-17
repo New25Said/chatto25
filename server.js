@@ -28,7 +28,7 @@ function saveHistory(){
 }
 
 io.on("connection", (socket) => {
-  console.log("✅ Usuario conectado:", socket.id);
+  console.log("âœ… Usuario conectado:", socket.id);
 
   socket.on("set nickname", (nickname) => {
     users[socket.id] = nickname;
@@ -37,7 +37,7 @@ io.on("connection", (socket) => {
     socket.emit("group list", Object.keys(groups));
   });
 
-  // Mensajes públicos
+  // Mensajes pÃºblicos
   socket.on("chat public", (text) => {
     const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "public", target: null };
     chatHistory.push(msg);
@@ -52,7 +52,7 @@ io.on("connection", (socket) => {
       const msg = { id: socket.id, name: users[socket.id], text, time: Date.now(), type: "private", target };
       chatHistory.push(msg);
       saveHistory();
-      socket.emit("chat message", msg);        // tú ves tu mensaje
+      socket.emit("chat message", msg);        // tÃº ves tu mensaje
       io.to(targetId).emit("chat message", msg); // destinatario
     }
   });
@@ -96,11 +96,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", ()=>{
-    console.log("❌ Usuario desconectado:", socket.id);
+    console.log("âŒ Usuario desconectado:", socket.id);
     delete users[socket.id];
     io.emit("user list", Object.values(users));
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, ()=>console.log(`✅ Servidor chat listo en puerto ${PORT}`));
+server.listen(PORT, ()=>console.log(`âœ… Servidor chat listo en puerto ${PORT}`));
