@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>⚠️ Reset Chat</title>
+<style>
+body { font-family: Arial, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#f0f0f0; }
+button { padding:12px 24px; border:none; background:#d9534f; color:#fff; font-size:16px; border-radius:8px; cursor:pointer; }
+button:hover { filter:brightness(1.1); }
+h1 { color:#333; margin-bottom:20px; }
+</style>
+</head>
+<body>
+<h1>⚠️ Reset de Chat</h1>
+<button id="reset-btn">Vaciar todo el historial y datos</button>
+
+<script>
+document.getElementById("reset-btn").addEventListener("click", async ()=>{
+  if(confirm("¿Seguro que quieres borrar TODO? Esto no se puede deshacer.")){
+    try{
+      const res = await fetch("/reset", { method:"POST" });
+      if(res.ok) alert("✅ Todos los datos han sido borrados.");
+      else alert("❌ Error al borrar los datos.");
+    }catch(e){
+      alert("❌ Error al conectar con el servidor.");
+      console.error(e);
+    }
+  }
+});
+</script>
+</body>
+</html>

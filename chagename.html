@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>💬 Chat estilo WhatsApp — Cambiar nombre</title>
+  <style>
+    :root{
+      --verde:#075e54;--verde-osc:#05473f;--claro:#f0f2f5;--blanco:#fff;--gris:#bbb;--texto:#111
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui, Arial, sans-serif;background:var(--claro);color:var(--texto)}
+    #app{display:flex;height:100vh}
+    #sidebar{width:300px;max-width:35vw;background:#eaeaea;border-right:1px solid #ddd;display:flex;flex-direction:column}
+    #sidebar-header{background:var(--verde);color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+    #sidebar-header .title{font-weight:700}
+    #search{padding:10px}
+    #search input{width:100%;padding:10px;border:1px solid #ccc;border-radius:10px}
+    #contacts{flex:1;overflow:auto}
+    .contact{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid #ddd;cursor:pointer;background:#fdfdfd}
+    .contact:hover{background:#f6f6f6}
+    .avatar{width:36px;height:36px;border-radius:999px;background:#ccc}
+    .meta{display:flex;flex-direction:column;font-size:.9rem}
+    .meta .n{font-weight:600}
+    #chat{flex:1;display:flex;flex-direction:column;background:url('https://i.imgur.com/cWnQjJo.png') repeat;}
+    #chat-header{background:var(--verde);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px}
+    #messages{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:8px}
+    .msg{max-width:70%;padding:8px 10px;border-radius:10px;box-shadow:0 1px 1px rgba(0,0,0,.06)}
+    .me{align-self:flex-end;background:#d9fdd3}
+    .other{align-self:flex-start;background:#fff}
+    #composer{padding:10px;display:flex;gap:8px;border-top:1px solid #ddd;background:#fafafa}
+    #composer input{flex:1;padding:10px;border:1px solid #ccc;border-radius:999px}
+    #composer button{padding:10px 14px;border:none;border-radius:999px;background:var(--verde);color:#fff;font-weight:600;cursor:pointer}
+    #composer button:hover{background:var(--verde-osc)}
+    dialog{border:none;border-radius:14px;padding:0;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    .modal{padding:16px;width:min(92vw,420px)}
+    .row{display:flex;gap:10px;align-items:center;margin:10px 0}
+    .row input{flex:1;padding:10px;border:1px solid #ccc;border-radius:10px}
+    .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #ccc;background:#fff;cursor:pointer}
+    .btn.primary{background:var(--verde);color:#fff;border-color:var(--verde)}
+    .pill{background:#ffffff25;border:1px solid #ffffff50;border-radius:999px;padding:6px 10px;font-size:.85rem}
+  </style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <div class="title">Chats</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="currentName" class="pill" title="Tu nombre visible"></span>
+        <button id="btnChange" class="btn" style="border:none;background:#ffffff20;color:#fff" title="Cambiar nombre">✏️</button>
+      </div>
+    </div>
+    <div id="search"><input id="q" placeholder="Buscar contacto" /></div>
+    <div id="contacts"></div>
+  </aside>
+  <main id="chat">
+    <div id="chat-header">
+      <div class="avatar" aria-hidden></div>
+      <div class="room">General</div>
+    </div>
+    <div id="messages"></div>
+    <form id="composer" autocomplete="off">
+      <input id="text" placeholder="Escribe un mensaje" />
+      <button type="submit">Enviar</button>
+    </form>
+  </main>
+</div>
+<dialog id="nameDialog">
+  <form method="dialog" class="modal" id="nameForm">
+    <h3 style="margin:0 0 6px">Cambiar nombre</h3>
+    <p style="margin:0 0 8px;font-size:.95rem;color:#555">Este es el nombre que verán los demás en el chat.</p>
+    <div class="row">
+      <input id="nameInput" placeholder="Tu nombre" maxlength="30" />
+    </div>
+    <div class="actions">
+      <button class="btn" value="cancel">Cancelar</button>
+      <button class="btn primary" id="saveName" value="default">Guardar</button>
+    </div>
+  </form>
+</dialog>
+<script>
+  const NAME_KEY = 'chat_name_v2';
+  function sanitizeName(n){ return n.replace(/[\n\r\t]/g,' ').replace(/\s+/g,' ').trim().slice(0,30); }
+  function updateNameUI(name){
+    const el = document.getElementById('currentName');
+    if(el) el.textContent = name || 'Anónimo';
+    document.title = `💬 Chat — ${name || 'Anónimo'}`;
+  }
+  function saveName(name){
+    const clean = sanitizeName(name);
+    if(!clean) return;
+    localStorage.setItem(NAME_KEY, clean);
+    updateNameUI(clean);
+  }
+  function loadName(){
+    const stored = localStorage.getItem(NAME_KEY);
+    return stored && stored.trim() ? stored : '';
+  }
+  document.getElementById('btnChange').addEventListener('click',()=>{
+    const dlg = document.getElementById('nameDialog');
+    const inputName = document.getElementById('nameInput');
+    inputName.value = loadName();
+    dlg.showModal();
+    inputName.focus();
+    document.getElementById('saveName').onclick = ()=>{
+      const n = inputName.value.trim();
+      if(!n) return;
+      saveName(n);
+      dlg.close();
+    };
+  });
+  (function init(){
+    const name = loadName() || prompt('Escribe tu nombre visible:', '');
+    if(name) saveName(name);
+    updateNameUI(name);
+  })();
+</script>
+</body>
+</html>
