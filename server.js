@@ -127,12 +127,24 @@ socket.on("chat group", (msg) => {
 
 
   // Crear grupo
-  socket.on("create group", ({ groupName, members }) => {
-    if (!groups[groupName]) {
-      groups[groupName] = members;
-      io.emit("group list", Object.keys(groups));
-    }
-  });
+// Crear grupo (solo visible para los miembros)
+socket.on("create group", ({ groupName, members }) => {
+  if (!groups[groupName]) {
+    // incluir siempre al creador
+    const creator = users[socket.id];
+    const uniqueMembers = Array.from(new Set([creator, ...members]));
+
+    groups[groupName] = uniqueMembers;
+
+    // Notificar solo a los integrantes
+    Object.entries(users).forEach(([sid, nick]) => {
+      if (uniqueMembers.includes(nick)) {
+        io.to(sid).emit("group created", { groupName, members: uniqueMembers });
+      }
+    });
+  }
+});
+
 
   // Indicador escribiendo
   socket.on("typing", ({ type, target }) => {
