@@ -43,15 +43,98 @@ body, html{margin:0;padding:0;height:100%;font-family:Arial,sans-serif}
 #image-btn {
   border: none;
   background: none;
-  width: 36px;      /* ancho fijo */
-  height: 36px;     /* alto fijo */
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 50%; /* opcional, que sea redondo */
+  border-radius: 50%;
+}
+#image-btn:hover {
+  background: rgba(0,0,0,0.05);
 }
 
-#image-btn:hover {
-  background: rgba(0,0,0,0.05); /* ligero efecto al pasar mouse */
+/* 🔹 NUEVOS ESTILOS PARA CREACIÓN DE GRUPOS */
+#group-modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+#group-modal .modal-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  width: 350px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#group-modal h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #075e54;
+  text-align: center;
+}
+
+#group-name {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  outline: none;
+}
+
+#user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+#user-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+#user-list input[type="checkbox"] {
+  accent-color: #075e54; /* verde WhatsApp */
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-buttons button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#save-group-btn {
+  background: #075e54;
+  color: white;
+}
+
+#cancel-group-btn {
+  background: #ccc;
+  color: black;
 }
