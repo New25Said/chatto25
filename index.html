@@ -1,264 +1,141 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>💬 Chat WhatsApp Style</title>
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <title>💬 Chat WhatsApp Style</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div id="chat-app">
+  <!-- ===== Sidebar ===== -->
   <div id="sidebar">
     <div id="sidebar-header">💬 Chat</div>
     <input id="search-contact" placeholder="Buscar..."/>
     <ul id="chat-list"></ul>
-    <button id="create-group-btn">Crear Grupo</button>
+    <button id="create-group">➕ Crear Grupo</button>
   </div>
 
-  <div id="chat-panel">
-    <div id="chat-header-panel">
-      <span id="chat-title">General</span>
-      <span id="typing-indicator"></span>
-    </div>
-    <ul id="messages"></ul>
+  <!-- ===== Main Chat ===== -->
+  <div id="main">
+    <div id="chat-header">Selecciona un chat</div>
+    <div id="messages"></div>
     <div id="input-area">
-      <input id="message-input" placeholder="Escribe un mensaje..." autocomplete="off"/>
-      <input type="file" id="image-input" accept="image/*" style="display:none"/>
-      <button id="image-btn">📎</button>
-      <button id="send-btn">➤</button>
+      <input id="message-input" placeholder="Escribe un mensaje..."/>
+      <button id="send">Enviar</button>
     </div>
   </div>
 </div>
 
-<!-- Modal nickname -->
-<div id="nickname-modal">
-  <input id="username" placeholder="Escribe tu nickname"/>
-  <button id="join-btn">Unirse</button>
+<!-- ===== Modal Crear Grupo ===== -->
+<div id="group-modal">
+  <div class="modal-content">
+    <h2>Crear grupo</h2>
+    <input id="group-name" placeholder="Nombre del grupo"/>
+    <div id="user-list"></div>
+    <div class="modal-buttons">
+      <button id="confirm-create-group">Crear</button>
+      <button id="cancel-group">Cancelar</button>
+    </div>
+  </div>
 </div>
 
-<!-- Modal crear grupo -->
-<div id="group-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; display:flex; flex-direction:column; gap:10px;">
-  <input id="group-name" placeholder="Nombre del grupo"/>
-  <div id="group-users" style="max-height:300px; overflow-y:auto; background:#fff; padding:10px; border-radius:8px;"></div>
-  <button id="confirm-create-group">Crear Grupo</button>
-  <button id="cancel-group">Cancelar</button>
-</div>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
+  // ===== Datos iniciales =====
+  const contacts = ["Ana","Luis","Carlos","María","Pedro"];
+  const chatList = document.getElementById("chat-list");
+  const messagesDiv = document.getElementById("messages");
+  const chatHeader = document.getElementById("chat-header");
+  const sendBtn = document.getElementById("send");
+  const msgInput = document.getElementById("message-input");
 
-let nickname = localStorage.getItem("nickname") || "";
-let currentChat = "public";
-let currentTarget = null;
-let allMessages = [];
-let unreadCounts = {};
+  let currentChat = null;
+  let chats = {};
 
-const nicknameModal = document.getElementById("nickname-modal");
-const usernameInput = document.getElementById("username");
-const joinBtn = document.getElementById("join-btn");
-const messages = document.getElementById("messages");
-const messageInput = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-btn");
-const typingIndicator = document.getElementById("typing-indicator");
-const chatList = document.getElementById("chat-list");
-const chatTitle = document.getElementById("chat-title");
-const createGroupBtn = document.getElementById("create-group-btn");
-const imageInput = document.getElementById("image-input");
-const imageBtn = document.getElementById("image-btn");
-
-// Modal grupo
-const groupModal = document.getElementById("group-modal");
-const groupNameInput = document.getElementById("group-name");
-const groupUsersDiv = document.getElementById("group-users");
-const confirmCreateGroup = document.getElementById("confirm-create-group");
-const cancelGroupBtn = document.getElementById("cancel-group");
-
-// Abrir selector de archivos
-imageBtn.addEventListener("click", ()=>imageInput.click());
-imageInput.addEventListener("change", ()=>{
-  const file = imageInput.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const dataURL = reader.result;
-    if(currentChat==="public") socket.emit("chat public",{type:"image", data:dataURL});
-    else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text:"",type:"image",data:dataURL});
-    else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text:"",type:"image",data:dataURL});
-  };
-  reader.readAsDataURL(file);
-  imageInput.value="";
-});
-
-// Conexión
-socket.on("connect", ()=>{
-  if(nickname){
-    socket.emit("set nickname",nickname);
-    nicknameModal.style.display="none";
-  } else nicknameModal.style.display="flex";
-});
-
-// Función agregar mensaje
-function addMessage(msg){
-  const li = document.createElement("li");
-  li.className = "message " + (msg.name===nickname?"you":"other");
-  let content = `<span class="name">${msg.name}</span>`;
-  if(msg.image) content += `<img src="${msg.image}" class="chat-image"/>`;
-  if(msg.text) content += `<span class="text">${msg.text}</span>`;
-  content += `<span class="time">${new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
-  li.innerHTML=content;
-  messages.appendChild(li);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-// Renderizar mensajes
-function renderMessages(){
-  messages.innerHTML="";
-  allMessages.forEach(msg=>{
-    if(currentChat==="public" && msg.type==="public") addMessage(msg);
-    else if(currentChat==="private" && msg.type==="private"){
-      if((msg.name===nickname && msg.target===currentTarget) || (msg.name===currentTarget && msg.target===nickname)) addMessage(msg);
-    }
-    else if(currentChat==="group" && msg.type==="group" && msg.target===currentTarget) addMessage(msg);
-  });
-}
-
-// Unirse
-joinBtn.addEventListener("click", ()=>{
-  const name=usernameInput.value.trim();
-  if(name){
-    nickname=name;
-    localStorage.setItem("nickname",nickname);
-    nicknameModal.style.display="none";
-    socket.emit("set nickname",nickname);
-  }
-});
-
-// Enviar mensaje
-sendBtn.addEventListener("click", ()=>{
-  const text = messageInput.value.trim();
-  if(!text || !nickname) return;
-  if(currentChat==="public") socket.emit("chat public",text);
-  else if(currentChat==="private") socket.emit("chat private",{target:currentTarget,text});
-  else if(currentChat==="group") socket.emit("chat group",{groupName:currentTarget,text});
-  messageInput.value="";
-});
-
-// Enter para enviar
-messageInput.addEventListener("keypress",e=>{if(e.key==="Enter") sendBtn.click();});
-
-// Indicador escribiendo
-messageInput.addEventListener("input",()=>{socket.emit("typing",{type:currentChat,target:currentTarget});});
-socket.on("typing",data=>{
-  if(data.name!==nickname){
-    typingIndicator.textContent=`${data.name} está escribiendo...`;
-    clearTimeout(window.typingTimeout);
-    window.typingTimeout=setTimeout(()=>typingIndicator.textContent="",2000);
-  }
-});
-
-// Historial
-socket.on("chat history",history=>{allMessages=history; renderMessages();});
-socket.on("chat message",msg=>{
-  allMessages.push(msg);
-
-  if(msg.type==="private" && msg.name!==nickname){
-    if(currentChat!=="private"||currentTarget!==msg.name){
-      unreadCounts[msg.name]=(unreadCounts[msg.name]||0)+1; updateUnreadBadge(msg.name);
-    }
-  }
-  if(msg.type==="group" && msg.name!==nickname){
-    if(currentChat!=="group"||currentTarget!==msg.target){
-      unreadCounts[msg.target]=(unreadCounts[msg.target]||0)+1; updateUnreadBadge(msg.target);
-    }
-  }
-  renderMessages();
-});
-
-// Actualizar badge
-function updateUnreadBadge(nameOrGroup){
-  const lis = chatList.querySelectorAll("li");
-  lis.forEach(li=>{
-    if(li.textContent.startsWith(nameOrGroup)){
-      const oldBadge = li.querySelector(".unread-badge");
-      if(oldBadge) oldBadge.remove();
-      const count = unreadCounts[nameOrGroup];
-      if(count>0){
-        const badge=document.createElement("span");
-        badge.className="unread-badge";
-        badge.textContent=count;
-        li.appendChild(badge);
-      }
-    }
-  });
-}
-
-// Lista usuarios
-socket.on("user list",users=>{
-  chatList.innerHTML="";
-  const generalLi=document.createElement("li");
-  generalLi.textContent="General"; generalLi.className="public";
-  generalLi.addEventListener("click",()=>selectChat("public"));
-  chatList.appendChild(generalLi);
-
-  users.forEach(user=>{
-    if(user!==nickname){
-      const li=document.createElement("li");
-      li.textContent=user; li.className="contact";
-      li.addEventListener("click",()=>selectChat("private",user));
+  // ===== Render lista de chats =====
+  function renderChats(){
+    chatList.innerHTML="";
+    Object.keys(chats).forEach(name=>{
+      const li = document.createElement("li");
+      li.textContent = name;
+      li.onclick=()=>{
+        currentChat=name;
+        chatHeader.textContent=name;
+        renderMessages();
+      };
       chatList.appendChild(li);
-    }
-  });
-
-  // Cuando se abre modal grupo, actualizar lista de checkboxes
-  groupUsersDiv.innerHTML="";
-  users.forEach(user=>{
-    if(user!==nickname){
-      const cb = document.createElement("input");
-      cb.type="checkbox"; cb.value=user; cb.id="user-"+user;
-      const label = document.createElement("label"); label.htmlFor="user-"+user; label.textContent=user;
-      const div=document.createElement("div"); div.appendChild(cb); div.appendChild(label);
-      groupUsersDiv.appendChild(div);
-    }
-  });
-});
-
-// Lista grupos
-socket.on("group list",groups=>{
-  // Primero borrar grupos antiguos
-  chatList.querySelectorAll("li.group").forEach(li=>li.remove());
-  groups.forEach(group=>{
-    const li=document.createElement("li");
-    li.textContent=group; li.className="group";
-    li.addEventListener("click",()=>selectChat("group",group));
-    chatList.appendChild(li);
-  });
-});
-
-// Crear grupo - abrir modal
-createGroupBtn.addEventListener("click",()=>{groupModal.style.display="flex";});
-cancelGroupBtn.addEventListener("click",()=>{groupModal.style.display="none"; groupNameInput.value="";});
-
-// Confirmar crear grupo
-confirmCreateGroup.addEventListener("click",()=>{
-  const groupName=groupNameInput.value.trim();
-  const selectedUsers=Array.from(groupUsersDiv.querySelectorAll("input:checked")).map(cb=>cb.value);
-  if(groupName && selectedUsers.length>0){
-    selectedUsers.push(nickname);
-    socket.emit("create group",{groupName, members:selectedUsers});
-    groupModal.style.display="none"; groupNameInput.value="";
+    });
   }
-});
 
-// Cambiar chat
-function selectChat(type,target=null){
-  currentChat=type;
-  currentTarget=target;
-  chatTitle.textContent=target||"General";
-  if(target && unreadCounts[target]){delete unreadCounts[target]; updateUnreadBadge(target);}
-  renderMessages();
-}
+  // ===== Render mensajes =====
+  function renderMessages(){
+    messagesDiv.innerHTML="";
+    if(!currentChat) return;
+    chats[currentChat].forEach(msg=>{
+      const div=document.createElement("div");
+      div.className="message";
+      div.textContent=msg;
+      messagesDiv.appendChild(div);
+    });
+  }
+
+  // ===== Enviar mensaje =====
+  sendBtn.onclick=()=>{
+    if(!currentChat) return;
+    if(msgInput.value.trim()==="") return;
+    chats[currentChat].push(msgInput.value.trim());
+    msgInput.value="";
+    renderMessages();
+  };
+
+  // ===== Crear Grupo =====
+  const createGroupBtn=document.getElementById("create-group");
+  const groupModal=document.getElementById("group-modal");
+  const groupNameInput=document.getElementById("group-name");
+  const groupUsersDiv=document.getElementById("user-list");
+  const confirmCreateGroup=document.getElementById("confirm-create-group");
+  const cancelGroupBtn=document.getElementById("cancel-group");
+
+  // Abrir modal
+  createGroupBtn.onclick=()=>{
+    groupModal.classList.add("active");
+    groupUsersDiv.innerHTML="";
+    contacts.forEach(c=>{
+      const div=document.createElement("div");
+      const cb=document.createElement("input");
+      cb.type="checkbox";
+      cb.value=c;
+      const label=document.createElement("label");
+      label.textContent=c;
+      div.appendChild(cb);
+      div.appendChild(label);
+      groupUsersDiv.appendChild(div);
+    });
+  };
+
+  // Cancelar modal
+  cancelGroupBtn.onclick=()=>{
+    groupModal.classList.remove("active");
+    groupNameInput.value="";
+  };
+
+  // Confirmar crear grupo
+  confirmCreateGroup.onclick=()=>{
+    const name=groupNameInput.value.trim();
+    if(!name) return alert("Ponle nombre al grupo");
+    const selected=[...groupUsersDiv.querySelectorAll("input:checked")].map(cb=>cb.value);
+    if(selected.length<1) return alert("Selecciona al menos un integrante");
+
+    chats[name]=[];
+    renderChats();
+    groupModal.classList.remove("active");
+    groupNameInput.value="";
+  };
+
+  // Inicializar con chats individuales
+  contacts.forEach(c=>{ chats[c]=[]; });
+  renderChats();
 </script>
-<script src="notifications.js"></script>
+
 </body>
 </html>
